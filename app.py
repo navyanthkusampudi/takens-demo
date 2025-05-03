@@ -130,6 +130,9 @@ def main():
     # Audio source: upload or record
     st.sidebar.header("Audio source")
     source = st.sidebar.radio("Choose source", ("Upload WAV", "Record from mic"))
+    # Remind user to select microphone source when recording
+    if source == "Record from mic":
+        st.sidebar.warning("⚠️ **Remember to select your microphone as the audio input device!**")
 
     audio_bytes = None
     if source == "Upload WAV":
