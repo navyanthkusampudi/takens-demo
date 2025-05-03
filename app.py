@@ -64,7 +64,7 @@ def plot_full_timeseries(y, sr, t0, t1):
 
 def plot_full_spectrogram(f, t, Sxx_db, t0, t1):
     fig, ax = plt.subplots(figsize=(8, 3))
-    ax.pcolormesh(t, f, Sxx_db, cmap="gray_r", shading="gouraud")
+    ax.pcolormesh(t, f, Sxx_db, cmap="gray", shading="gouraud")
     ax.axvspan(t0, t1, color="red", alpha=0.3)
     ax.set(xlabel="Time (s)", ylabel="Frequency (Hz)",
            title="Full Spectrogram with Selected Window")
