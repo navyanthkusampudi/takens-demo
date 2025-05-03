@@ -1,6 +1,10 @@
 import io
 
 import numpy as np
+import warnings
+from scipy.io.wavfile import WavFileWarning
+# suppress non-data chunk warnings from scipy wavfile
+warnings.filterwarnings("ignore", category=WavFileWarning)
 import streamlit as st
 from scipy.io import wavfile
 from scipy.signal import spectrogram as spgram
@@ -174,7 +178,7 @@ def main():
         '''
         st.components.v1.html(recorder_html, height=100)
         # Listen for message from the iframe
-        msg = st.experimental_get_query_params().get("audioBase64")
+        msg = st.query_params().get("audioBase64")
         if msg:
             import base64
             audio_bytes = base64.b64decode(msg[0])
