@@ -76,7 +76,8 @@ def plot_window_scatter(y_win, sr):
     """
     time_win = np.arange(len(y_win)) / sr
     fig = px.scatter(
-        x=time_win, y=y_win,size=4,
+        x=time_win, y=y_win,
+        marker=dict(size=4,),
         labels={"x": "Time (s)", "y": "Amplitude"},
         title="Selected Window Time Series"
     )
@@ -89,7 +90,8 @@ def plot_embedding_2d(X, tau):
     Plot 2D Takens embedding as a 600x600 square with equal scales.
     """
     fig = px.scatter(
-        x=X[:, 0], y=X[:, 1],size=4,
+        x=X[:, 0], y=X[:, 1],
+        marker=dict(size=4,),
         labels={"x": "y(t)", "y": f"y(t+{tau})"},
         title="2D Takens Embedding"
     )
