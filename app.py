@@ -9,34 +9,40 @@ import matplotlib.pyplot as plt
 import plotly.express as px
 import plotly.graph_objs as go
 
+# for mp3 decoding:
+from pydub import AudioSegment  
 
-def load_audio(audio_bytes):
+
+def load_audio(audio_bytes, fmt="wav"):
     """
-    Read WAV from raw bytes and return sample rate and normalized mono signal.
+    Read WAV or MP3 from raw bytes and return sample rate and normalized mono signal.
+    fmt should be "wav" or "mp3".
     """
-    sr, data = wavfile.read(io.BytesIO(audio_bytes))
-    # Convert stereo to mono if needed
-    y = data.mean(axis=1).astype(float) if data.ndim > 1 else data.astype(float)
-    # Normalize amplitude
-    y /= np.max(np.abs(y))
+    if fmt == "wav":
+        sr, data = wavfile.read(io.BytesIO(audio_bytes))
+        y = data.mean(axis=1).astype(float) if data.ndim > 1 else data.astype(float)
+    else:
+        # decode mp3 (or any format pydub supports)
+        audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format=fmt)
+        sr = audio.frame_rate
+        arr = np.array(audio.get_array_of_samples())
+        if audio.channels > 1:
+            arr = arr.reshape((-1, audio.channels))
+            y = arr.mean(axis=1).astype(float)
+        else:
+            y = arr.astype(float)
+    # normalize
+    y /= np.max(np.abs(y)) + 1e-16
     return sr, y
 
 
 def compute_spectrogram(y, sr, nperseg=1024, noverlap=512):
-    """
-    Compute spectrogram (in dB) of signal y.
-    Returns frequencies, times, and dB-scaled spectrogram.
-    """
     f, t, Sxx = spgram(y, fs=sr, nperseg=nperseg, noverlap=noverlap)
     Sxx_db = 10 * np.log10(Sxx + 1e-10)
     return f, t, Sxx_db
 
 
 def compute_embedding(y, tau, m):
-    """
-    Build Takens time-delay embedding matrix of dimension m and delay tau.
-    Returns array of shape (N, m), or None if window too short.
-    """
     N = len(y) - (m - 1) * tau
     if N <= 0:
         return None
@@ -44,9 +50,6 @@ def compute_embedding(y, tau, m):
 
 
 def plot_full_timeseries(y, sr, t0, t1):
-    """
-    Plot full time series in gray with selected window overlayed in red.
-    """
     time = np.arange(len(y)) / sr
     y_win = y[int(t0 * sr) : int(t1 * sr)]
     time_win = np.arange(int(t0 * sr), int(t1 * sr)) / sr
@@ -60,9 +63,6 @@ def plot_full_timeseries(y, sr, t0, t1):
 
 
 def plot_full_spectrogram(f, t, Sxx_db, t0, t1):
-    """
-    Plot full spectrogram in gray-scale with a red transparent span for the selected window.
-    """
     fig, ax = plt.subplots(figsize=(8, 3))
     ax.pcolormesh(t, f, Sxx_db, cmap="gray", shading="gouraud")
     ax.axvspan(t0, t1, color="red", alpha=0.3)
@@ -72,9 +72,6 @@ def plot_full_spectrogram(f, t, Sxx_db, t0, t1):
 
 
 def plot_window_scatter(y_win, sr):
-    """
-    Plot selected window as a Plotly scatter time series with marker size 4.
-    """
     time_win = np.arange(len(y_win)) / sr
     fig = px.scatter(
         x=time_win, y=y_win,
@@ -86,9 +83,6 @@ def plot_window_scatter(y_win, sr):
 
 
 def plot_embedding_2d(X, tau):
-    """
-    Plot 2D Takens embedding as a 600x600 square with equal scales.
-    """
     fig = px.scatter(
         x=X[:, 0], y=X[:, 1],
         labels={"x": "y(t)", "y": f"y(t+{tau})"},
@@ -101,9 +95,6 @@ def plot_embedding_2d(X, tau):
 
 
 def plot_embedding_3d(X, time_axis):
-    """
-    Plot 3D Takens embedding: x=y(t), y=y(t+τ), z=time (s) for each point.
-    """
     fig = go.Figure(go.Scatter3d(
         x=X[:, 0],
         y=X[:, 1],
@@ -130,12 +121,12 @@ def main():
     st.set_page_config(page_title="Takens Embedding Demo", layout="wide")
     st.title("Interactive Takens’ Time-Delay Embedding")
 
-    # --- file upload or default ---
-    uploaded = st.file_uploader("Upload a WAV file (mono or stereo)", type=["wav"])
+    # allow both wav and mp3
+    uploaded = st.file_uploader("Upload a WAV or MP3 file", type=["wav", "mp3"])
     if uploaded:
         audio_bytes = uploaded.read()
+        fmt = Path(uploaded.name).suffix.lower().strip(".")
     else:
-        # build path relative to this script
         DATA_DIR = Path(__file__).parent / "sound_data"
         default_path = DATA_DIR / "XC358435 - Cordillera Azul Antbird - Myrmoderus eowilsoni.wav"
         if not default_path.exists():
@@ -143,10 +134,11 @@ def main():
             return
         st.warning(f"No file uploaded; using default audio:\n`{default_path}`")
         audio_bytes = default_path.read_bytes()
+        fmt = "wav"
 
     # play & load
-    st.audio(audio_bytes, format="audio/wav")
-    sr, y_full = load_audio(audio_bytes)
+    st.audio(audio_bytes, format=f"audio/{fmt}")
+    sr, y_full = load_audio(audio_bytes, fmt=fmt)
 
     # Sidebar controls
     duration = len(y_full) / sr
@@ -164,10 +156,8 @@ def main():
     m = st.sidebar.slider("Dimension m", 2, 20, 3, 1)
     show_3d = st.sidebar.checkbox("Show 3D embedding", False)
 
-    # Precompute spectrogram
+    # Spectrogram & plots
     f, t_spec, Sxx_db = compute_spectrogram(y_full, sr)
-
-    # Plots
     st.pyplot(plot_full_timeseries(y_full, sr, t0, t1))
     st.pyplot(plot_full_spectrogram(f, t_spec, Sxx_db, t0, t1))
     st.plotly_chart(plot_window_scatter(y_win, sr), use_container_width=True)
