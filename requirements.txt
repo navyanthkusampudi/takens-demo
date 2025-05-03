@@ -1,4 +1,5 @@
 streamlit
+pydub
 numpy
 scipy
 plotly
