@@ -1,10 +1,6 @@
 import io
 
 import numpy as np
-import warnings
-from scipy.io.wavfile import WavFileWarning
-# suppress non-data chunk warnings from scipy wavfile
-warnings.filterwarnings("ignore", category=WavFileWarning)
 import streamlit as st
 from scipy.io import wavfile
 from scipy.signal import spectrogram as spgram
@@ -13,31 +9,10 @@ import plotly.express as px
 import plotly.graph_objs as go
 
 # Use streamlit-webrtc for in-browser audio capture
-# remove WebRTC recording imports and functions
-import io
+from streamlit_webrtc import webrtc_streamer, WebRtcMode
 
-import numpy as np
-import warnings
-from scipy.io.wavfile import WavFileWarning
-# suppress non-data chunk warnings from scipy wavfile
-warnings.filterwarnings("ignore", category=WavFileWarning)
-import streamlit as st
-from scipy.io import wavfile
-from scipy.signal import spectrogram as spgram
-import matplotlib.pyplot as plt
-import plotly.express as px
-import plotly.graph_objs as go
-
-# --- Audio Handling: only upload ---
 
 def load_audio(audio_bytes):
-    """
-    Read WAV from raw bytes and return sample rate and normalized mono signal.
-    """
-    sr, data = wavfile.read(io.BytesIO(audio_bytes))
-    y = data.mean(axis=1).astype(float) if data.ndim > 1 else data.astype(float)
-    y /= np.max(np.abs(y))
-    return sr, y(audio_bytes):
     """
     Read WAV from raw bytes and return sample rate and normalized mono signal.
     """
@@ -152,57 +127,20 @@ def main():
     st.set_page_config(page_title="Takens Embedding Demo", layout="wide")
     st.title("Interactive Takens’ Time-Delay Embedding")
 
-    # --- Audio source selection and recording via HTML/JS MediaRecorder ---
-    st.sidebar.header("Audio Source")
-    source = st.sidebar.radio("Choose Source", ("Upload WAV", "Record from mic"))
+    # Audio source: upload or record
+    st.sidebar.header("Audio source")
+    source = st.sidebar.radio("Choose source", ("Upload WAV", "Record from mic"))
+    # Remind user to select microphone source when recording
+    if source == "Record from mic":
+        st.sidebar.warning("⚠️ **Remember to select your microphone as the audio input device!**")
+
     audio_bytes = None
     if source == "Upload WAV":
-        uploaded = st.sidebar.file_uploader("Upload a WAV file", type=["wav"])
+        uploaded = st.file_uploader("Upload a WAV file", type=["wav"])
         if uploaded:
             audio_bytes = uploaded.read()
     else:
-        st.sidebar.warning("⚠️ Remember to allow microphone access in your browser!")
-        # Embed MediaRecorder HTML/JS
-        recorder_html = '''
-        <script>
-        let mediaRecorder;
-        let recordedChunks = [];
-        const startButton = document.createElement("button");
-        startButton.textContent = "Start Recording";
-        const stopButton = document.createElement("button");
-        stopButton.textContent = "Stop Recording";
-        stopButton.disabled = true;
-        document.body.appendChild(startButton);
-        document.body.appendChild(stopButton);
-        startButton.onclick = async () => {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
-            mediaRecorder.ondataavailable = e => recordedChunks.push(e.data);
-            mediaRecorder.start();
-            startButton.disabled = true;
-            stopButton.disabled = false;
-        };
-        stopButton.onclick = () => {
-            mediaRecorder.stop();
-            mediaRecorder.onstop = async () => {
-                const blob = new Blob(recordedChunks, { type: 'audio/webm' });
-                const reader = new FileReader();
-                reader.readAsDataURL(blob);
-                reader.onloadend = () => {
-                    const base64data = reader.result.split(',')[1];
-                    window.parent.postMessage({ audioBase64: base64data }, '*');
-                };
-            };
-            stopButton.disabled = true;
-        };
-        </script>
-        '''
-        st.components.v1.html(recorder_html, height=100)
-        # Listen for message from the iframe
-        msg = st.query_params.get("audioBase64")
-        if msg:
-            import base64
-            audio_bytes = base64.b64decode(msg[0])
+        audio_bytes = record_audio()
 
     if not audio_bytes:
         st.info("Please upload or record audio to proceed.")
