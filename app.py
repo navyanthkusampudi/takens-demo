@@ -9,7 +9,7 @@ import plotly.express as px
 import plotly.graph_objs as go
 
 # Use the pure-Python Streamlit audiorecorder component
-from streamlit_audiorecorder import audiorecorder
+from audiorecorder import audiorecorder
 
 
 def load_audio(audio_bytes):
