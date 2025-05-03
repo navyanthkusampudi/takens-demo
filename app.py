@@ -9,7 +9,7 @@ import plotly.express as px
 import plotly.graph_objs as go
 
 # Use the pure-Python Streamlit audiorecorder component
-from audiorecorder import audiorecorder
+from streamlit_audiorecorder import audiorecorder
 
 
 def load_audio(audio_bytes):
@@ -17,9 +17,7 @@ def load_audio(audio_bytes):
     Read WAV from raw bytes and return sample rate and normalized mono signal.
     """
     sr, data = wavfile.read(io.BytesIO(audio_bytes))
-    # Stereo → mono if needed
     y = data.mean(axis=1).astype(float) if data.ndim > 1 else data.astype(float)
-    # Normalize amplitude
     y /= np.max(np.abs(y))
     return sr, y
 
@@ -116,8 +114,8 @@ def main():
         if uploaded:
             audio_bytes = uploaded.read()
     else:
-        # Record using pure-Python Streamlit-audiorecorder
-        audio_bytes = audiorecorder(key="mic")
+        # Record using streamlit-audiorecorder component
+        audio_bytes = audiorecorder()
 
     if not audio_bytes:
         st.info("Please upload or record audio to proceed.")
@@ -149,7 +147,7 @@ def main():
     st.pyplot(plot_full_spectrogram(f, t_spec, Sxx_db, t0, t1))
     st.plotly_chart(plot_window_scatter(y_win, sr), use_container_width=True)
 
-    # Embedding
+    # Compute embedding
     X = compute_embedding(y_win, tau, m)
     if X is None:
         st.error(f"Segment too short for m={m}, τ={tau} (need > {(m-1)*tau} samples).")
