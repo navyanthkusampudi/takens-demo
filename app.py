@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 import plotly.express as px
 import plotly.graph_objs as go
 
-# Import audio recorder component
-from streamlit_audiorecorder import audio_recorder
+# Use streamlit-audiorecorder per docs
+from audiorecorder import audiorecorder
 
 
 def load_audio(audio_bytes):
@@ -89,14 +89,15 @@ def plot_window_scatter(y_win, sr):
 
 def plot_embedding_2d(X, tau):
     """
-    Plot 2D Takens embedding as a 600x600 square with equal scales.
+    Plot 2D Takens embedding as a square with equal scales.
     """
     fig = px.scatter(
         x=X[:, 0], y=X[:, 1],
         labels={"x": "y(t)", "y": f"y(t+{tau})"},
         title="2D Takens Embedding"
     )
-    fig.update_layout(width=800, height=500)
+    size = 600
+    fig.update_layout(width=size, height=size)
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
     return fig
 
@@ -110,10 +111,7 @@ def plot_embedding_3d(X, time_axis):
         y=X[:, 1],
         z=time_axis,
         mode="markers",
-        marker=dict(size=4, color=time_axis, 
-                    colorscale="Viridis", 
-                    showscale=False
-                   )
+        marker=dict(size=4, color=time_axis, colorscale="Viridis", showscale=False)
     ))
     fig.update_layout(
         title="3D Takens Embedding (with Time)",
@@ -122,7 +120,7 @@ def plot_embedding_3d(X, time_axis):
             yaxis_title="y(t+τ)",
             zaxis_title="Time (s)"
         ),
-        width=800, height=800,
+        width=600, height=600,
         margin=dict(t=40, b=40)
     )
     return fig
@@ -132,7 +130,7 @@ def main():
     st.set_page_config(page_title="Takens Embedding Demo", layout="wide")
     st.title("Interactive Takens’ Time-Delay Embedding")
 
-    # Source selection: Upload or Record
+    # Audio source: upload or record
     st.sidebar.header("Audio source")
     source = st.sidebar.radio("Choose source", ("Upload WAV", "Record from mic"))
 
@@ -143,25 +141,30 @@ def main():
             audio_bytes = uploaded.read()
     else:
         st.sidebar.info("Recording max 3 seconds")
-        recorded = audio_recorder(max_seconds=3, key="mic_rec")
-        if recorded:
-            audio_bytes = recorded
+        # Record using audiorecorder component
+        audio = audiorecorder("Start recording", "Stop recording", pause_prompt="", show_visualizer=True, key="mic")
+        if audio and len(audio) > 0:
+            # audio is a pydub AudioSegment
+            # Limit to first 3 seconds
+            if audio.duration_seconds > 3:
+                audio = audio[:3000]
+            buf = io.BytesIO()
+            audio.export(buf, format="wav")
+            audio_bytes = buf.getvalue()
 
     if not audio_bytes:
         st.info("Please upload or record audio to proceed.")
         return
 
-    # Play selected audio
+    # Play audio
     st.audio(audio_bytes, format="audio/wav")
     sr, y_full = load_audio(audio_bytes)
 
-    # Sidebar controls
+    # Sidebar controls for window and embedding
     duration = len(y_full) / sr
     default_end = duration / 10
     st.sidebar.header("Select data window")
-    t0, t1 = st.sidebar.slider(
-        "Window (s)", 0.0, float(duration), (0.0, float(default_end)), step=0.01
-    )
+    t0, t1 = st.sidebar.slider("Window (s)", 0.0, float(duration), (0.0, float(default_end)), step=0.01)
     i0, i1 = int(t0 * sr), int(t1 * sr)
     y_win = y_full[i0:i1]
     time_win = np.arange(i0, i1) / sr
@@ -171,20 +174,21 @@ def main():
     m = st.sidebar.slider("Dimension m", 2, 20, 3, 1)
     show_3d = st.sidebar.checkbox("Show 3D embedding", False)
 
-    # Precompute spectrogram
+    # Compute spectrogram once
     f, t_spec, Sxx_db = compute_spectrogram(y_full, sr)
 
-    # Plots
+    # Render plots
     st.pyplot(plot_full_timeseries(y_full, sr, t0, t1))
     st.pyplot(plot_full_spectrogram(f, t_spec, Sxx_db, t0, t1))
     st.plotly_chart(plot_window_scatter(y_win, sr), use_container_width=True)
 
-    # Embedding
+    # Compute embedding
     X = compute_embedding(y_win, tau, m)
     if X is None:
         st.error(f"Segment too short for m={m}, τ={tau} (need > {(m-1)*tau} samples).")
         return
 
+    # 2D and optional 3D embedding
     st.plotly_chart(plot_embedding_2d(X, tau), use_container_width=False)
     if show_3d:
         if m >= 3:
