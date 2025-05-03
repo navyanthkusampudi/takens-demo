@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 import plotly.express as px
 import plotly.graph_objs as go
 
-# Use the pure-Python Streamlit audiorecorder component
-from audiorecorder import audiorecorder
+# Use streamlit-webrtc for in-browser audio capture
+from streamlit_webrtc import webrtc_streamer, WebRtcMode
 
 
 def load_audio(audio_bytes):
@@ -100,6 +100,29 @@ def plot_embedding_3d(X, time_axis):
     return fig
 
 
+def record_audio():
+    """
+    Use WebRTC to capture audio from the mic and return WAV bytes when stopped.
+    """
+    ctx = webrtc_streamer(
+        key="mic",
+        mode=WebRtcMode.SENDONLY,
+        audio_receiver_size=256,
+        media_stream_constraints={"audio": True, "video": False},
+    )
+    if ctx.state.playing and ctx.audio_receiver:
+        frames = ctx.audio_receiver.get_frames()
+        if frames:
+            # Assume uniform sample rate
+            sr = frames[0].sample_rate
+            # Convert to mono numpy array
+            arr = np.concatenate([f.to_ndarray()[0] for f in frames])
+            buf = io.BytesIO()
+            wavfile.write(buf, sr, arr)
+            return buf.getvalue()
+    return None
+
+
 def main():
     st.set_page_config(page_title="Takens Embedding Demo", layout="wide")
     st.title("Interactive Takens’ Time-Delay Embedding")
@@ -114,8 +137,7 @@ def main():
         if uploaded:
             audio_bytes = uploaded.read()
     else:
-        # Record using streamlit-audiorecorder component
-        audio_bytes = audiorecorder()
+        audio_bytes = record_audio()
 
     if not audio_bytes:
         st.info("Please upload or record audio to proceed.")
@@ -156,7 +178,7 @@ def main():
     st.plotly_chart(plot_embedding_2d(X, tau), use_container_width=False)
     if show_3d:
         if m >= 3:
-            st.plotly_chart(plot_embedding_3d(X, time_win[:len(X)]), use_container_width=False)
+            st.plotly_chart(plot_embedding_3d(X, time_win[: len(X)]), use_container_width=False)
         else:
             st.warning("Need m ≥ 3 for 3D embedding.")
 
