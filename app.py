@@ -178,7 +178,7 @@ def main():
         '''
         st.components.v1.html(recorder_html, height=100)
         # Listen for message from the iframe
-        msg = st.query_params().get("audioBase64")
+        msg = st.query_params.get("audioBase64")
         if msg:
             import base64
             audio_bytes = base64.b64decode(msg[0])
