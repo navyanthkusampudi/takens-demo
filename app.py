@@ -9,11 +9,11 @@ import plotly.express as px
 import plotly.graph_objs as go
 
 
-def load_audio(uploaded_file):
+def load_audio(audio_bytes):
     """
-    Read WAV file from uploaded BytesIO and return sample rate and normalized mono signal.
+    Read WAV from raw bytes and return sample rate and normalized mono signal.
     """
-    sr, data = wavfile.read(io.BytesIO(uploaded_file.read()))
+    sr, data = wavfile.read(io.BytesIO(audio_bytes))
     # Convert stereo to mono if needed
     y = data.mean(axis=1).astype(float) if data.ndim > 1 else data.astype(float)
     # Normalize amplitude
@@ -34,12 +34,11 @@ def compute_spectrogram(y, sr, nperseg=1024, noverlap=512):
 def compute_embedding(y, tau, m):
     """
     Build Takens time-delay embedding matrix of dimension m and delay tau.
-    Returns array of shape (N, m).
+    Returns array of shape (N, m), or None if window too short.
     """
     N = len(y) - (m - 1) * tau
     if N <= 0:
         return None
-    # Stack delayed vectors
     return np.column_stack([y[i : i + N] for i in range(0, m * tau, tau)])
 
 
@@ -64,7 +63,7 @@ def plot_full_spectrogram(f, t, Sxx_db, t0, t1):
     Plot full spectrogram in gray-scale with a red transparent span for the selected window.
     """
     fig, ax = plt.subplots(figsize=(8, 3))
-    pcm = ax.pcolormesh(t, f, Sxx_db, cmap="gray", shading="gouraud")
+    ax.pcolormesh(t, f, Sxx_db, cmap="gray", shading="gouraud")
     ax.axvspan(t0, t1, color="red", alpha=0.3)
     ax.set(xlabel="Time (s)", ylabel="Frequency (Hz)",
            title="Full Spectrogram with Selected Window")
@@ -120,20 +119,20 @@ def plot_embedding_3d(X, tau):
 
 
 def main():
-    # Streamlit page setup
     st.set_page_config(page_title="Takens Embedding Demo", layout="wide")
     st.title("Interactive Takens’ Time-Delay Embedding")
 
-    # Upload
+    # Upload and play audio
     uploaded = st.file_uploader("Upload a WAV file (mono or stereo)", type=["wav"])
     if not uploaded:
         st.info("Please upload a WAV file to begin.")
         return
 
-    # Load data
-    sr, y_full = load_audio(uploaded)
+    audio_bytes = uploaded.read()
+    st.audio(audio_bytes, format="audio/wav")
+    sr, y_full = load_audio(audio_bytes)
 
-    # Sidebar: window selection
+    # Sidebar controls
     duration = len(y_full) / sr
     st.sidebar.header("Select data window")
     default_end = duration / 10
@@ -143,47 +142,30 @@ def main():
     i0, i1 = int(t0 * sr), int(t1 * sr)
     y_win = y_full[i0:i1]
 
-    # Sidebar: embedding parameters
     st.sidebar.header("Embedding parameters")
     tau = st.sidebar.slider("Delay τ (samples)", 1, 50, 10, 1)
     m = st.sidebar.slider("Dimension m", 2, 20, 3, 1)
     show_3d = st.sidebar.checkbox("Show 3D embedding", False)
 
-    # Compute spectrogram once
+    # Precompute spectrogram
     f, t_spec, Sxx_db = compute_spectrogram(y_full, sr)
 
-    # Plot full time series
-    fig_ts = plot_full_timeseries(y_full, sr, t0, t1)
-    st.pyplot(fig_ts)
+    # Plots
+    st.pyplot(plot_full_timeseries(y_full, sr, t0, t1))
+    st.pyplot(plot_full_spectrogram(f, t_spec, Sxx_db, t0, t1))
+    st.plotly_chart(plot_window_scatter(y_win, sr), use_container_width=True)
 
-    # Plot full spectrogram
-    fig_sp = plot_full_spectrogram(f, t_spec, Sxx_db, t0, t1)
-    st.pyplot(fig_sp)
-
-    # Plot selected window scatter
-    fig_win = plot_window_scatter(y_win, sr)
-    st.plotly_chart(fig_win, use_container_width=True)
-
-    # Takens embedding
+    # Embedding
     X = compute_embedding(y_win, tau, m)
     if X is None:
-        st.error(
-            f"Segment too short for m={m}, τ={tau} (need > {(m-1)*tau} samples)."
-        )
+        st.error(f"Segment too short for m={m}, τ={tau} (need > {(m-1)*tau} samples).")
         return
-
-    # 2D embedding
-    fig2d = plot_embedding_2d(X, tau)
-    st.plotly_chart(fig2d, use_container_width=False)
-
-    # 3D embedding
+    st.plotly_chart(plot_embedding_2d(X, tau), use_container_width=False)
     if show_3d:
         if m >= 3:
-            fig3d = plot_embedding_3d(X, tau)
-            st.plotly_chart(fig3d, use_container_width=False)
+            st.plotly_chart(plot_embedding_3d(X, tau), use_container_width=False)
         else:
             st.warning("Need m ≥ 3 for 3D embedding.")
-
 
 if __name__ == "__main__":
     main()
