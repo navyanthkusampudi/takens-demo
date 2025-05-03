@@ -8,6 +8,9 @@ import matplotlib.pyplot as plt
 import plotly.express as px
 import plotly.graph_objs as go
 
+# Import audio recorder component
+from streamlit_audiorecorder import audio_recorder
+
 
 def load_audio(audio_bytes):
     """
@@ -109,8 +112,7 @@ def plot_embedding_3d(X, time_axis):
         mode="markers",
         marker=dict(size=4, color=time_axis, 
                     colorscale="Viridis", 
-                    showscale=False,
-                    #colorbar=dict(title="Time (s)")
+                    showscale=False
                    )
     ))
     fig.update_layout(
@@ -130,20 +132,33 @@ def main():
     st.set_page_config(page_title="Takens Embedding Demo", layout="wide")
     st.title("Interactive Takens’ Time-Delay Embedding")
 
-    # Upload and play audio
-    uploaded = st.file_uploader("Upload a WAV file (mono or stereo)", type=["wav"])
-    if not uploaded:
-        st.info("Please upload a WAV file to begin.")
+    # Source selection: Upload or Record
+    st.sidebar.header("Audio source")
+    source = st.sidebar.radio("Choose source", ("Upload WAV", "Record from mic"))
+
+    audio_bytes = None
+    if source == "Upload WAV":
+        uploaded = st.file_uploader("Upload a WAV file", type=["wav"])
+        if uploaded:
+            audio_bytes = uploaded.read()
+    else:
+        st.sidebar.info("Recording max 3 seconds")
+        recorded = audio_recorder(max_seconds=3, key="mic_rec")
+        if recorded:
+            audio_bytes = recorded
+
+    if not audio_bytes:
+        st.info("Please upload or record audio to proceed.")
         return
 
-    audio_bytes = uploaded.read()
+    # Play selected audio
     st.audio(audio_bytes, format="audio/wav")
     sr, y_full = load_audio(audio_bytes)
 
     # Sidebar controls
     duration = len(y_full) / sr
-    st.sidebar.header("Select data window")
     default_end = duration / 10
+    st.sidebar.header("Select data window")
     t0, t1 = st.sidebar.slider(
         "Window (s)", 0.0, float(duration), (0.0, float(default_end)), step=0.01
     )
@@ -173,8 +188,7 @@ def main():
     st.plotly_chart(plot_embedding_2d(X, tau), use_container_width=False)
     if show_3d:
         if m >= 3:
-            # Use time_win up to length of embedding
-            st.plotly_chart(plot_embedding_3d(X, time_win[: len(X)]), use_container_width=False)
+            st.plotly_chart(plot_embedding_3d(X, time_win[:len(X)]), use_container_width=False)
         else:
             st.warning("Need m ≥ 3 for 3D embedding.")
 
