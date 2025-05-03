@@ -120,6 +120,19 @@ def plot_embedding_3d(X, time_axis):
 def main():
     st.set_page_config(page_title="Takens Embedding Demo", layout="wide")
     st.title("Interactive Takens’ Time-Delay Embedding")
+    st.markdown("""
+                ### 🔍 What This Tool Does
+
+                This interactive app allows users to upload a **WAV or MP3 recording** (e.g., birdsong), select a time window, and explore its underlying dynamics using **Takens' time-delay embedding**.
+
+                **Key features:**
+                - Displays waveform and spectrogram of the full signal.
+                - Lets you zoom into a time window for focused analysis.
+                - Computes and visualizes 2D and 3D embeddings of the signal using chosen **delay (τ)** and **embedding dimension (m)**.
+                - Helps reveal the **attractor structure** that captures the dynamics of the audio source.
+
+                This is a hands-on tool for studying chaotic behavior and phase space reconstruction in real-world audio data.
+                """)
 
     # allow both wav and mp3
     uploaded = st.file_uploader("Upload a WAV or MP3 file", type=["wav", "mp3"])
