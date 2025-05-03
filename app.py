@@ -41,7 +41,7 @@ st.sidebar.write(f"Selected: {actual_dur:.2f} s segment")
 st.sidebar.header("Embedding parameters")
 τ = st.sidebar.slider("Delay τ (samples)", 1, 50, 10, 1)
 m = st.sidebar.slider("Dimension m", 2, 20, 3, 1)
-show_3d = st.sidebar.checkbox("Show 3D (first 3 coords)", value=True)
+show_3d = st.sidebar.checkbox("Show 3D (first 3 coords)", value=False)
 
 # 5. Check window length
 N = len(y) - (m - 1) * τ
