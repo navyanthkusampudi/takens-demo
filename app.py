@@ -17,28 +17,18 @@ def load_audio(audio_bytes):
     Read WAV from raw bytes and return sample rate and normalized mono signal.
     """
     sr, data = wavfile.read(io.BytesIO(audio_bytes))
-    # Convert stereo to mono if needed
     y = data.mean(axis=1).astype(float) if data.ndim > 1 else data.astype(float)
-    # Normalize amplitude
     y /= np.max(np.abs(y))
     return sr, y
 
 
 def compute_spectrogram(y, sr, nperseg=1024, noverlap=512):
-    """
-    Compute spectrogram (in dB) of signal y.
-    Returns frequencies, times, and dB-scaled spectrogram.
-    """
     f, t, Sxx = spgram(y, fs=sr, nperseg=nperseg, noverlap=noverlap)
     Sxx_db = 10 * np.log10(Sxx + 1e-10)
     return f, t, Sxx_db
 
 
 def compute_embedding(y, tau, m):
-    """
-    Build Takens time-delay embedding matrix of dimension m and delay tau.
-    Returns array of shape (N, m), or None if window too short.
-    """
     N = len(y) - (m - 1) * tau
     if N <= 0:
         return None
@@ -46,9 +36,6 @@ def compute_embedding(y, tau, m):
 
 
 def plot_full_timeseries(y, sr, t0, t1):
-    """
-    Plot full time series in gray with selected window overlayed in red.
-    """
     time = np.arange(len(y)) / sr
     y_win = y[int(t0 * sr) : int(t1 * sr)]
     time_win = np.arange(int(t0 * sr), int(t1 * sr)) / sr
@@ -62,9 +49,6 @@ def plot_full_timeseries(y, sr, t0, t1):
 
 
 def plot_full_spectrogram(f, t, Sxx_db, t0, t1):
-    """
-    Plot full spectrogram in gray-scale with a red transparent span for the selected window.
-    """
     fig, ax = plt.subplots(figsize=(8, 3))
     ax.pcolormesh(t, f, Sxx_db, cmap="gray", shading="gouraud")
     ax.axvspan(t0, t1, color="red", alpha=0.3)
@@ -74,9 +58,6 @@ def plot_full_spectrogram(f, t, Sxx_db, t0, t1):
 
 
 def plot_window_scatter(y_win, sr):
-    """
-    Plot selected window as a Plotly scatter time series with marker size 4.
-    """
     time_win = np.arange(len(y_win)) / sr
     fig = px.scatter(
         x=time_win, y=y_win,
@@ -88,24 +69,17 @@ def plot_window_scatter(y_win, sr):
 
 
 def plot_embedding_2d(X, tau):
-    """
-    Plot 2D Takens embedding as a square with equal scales.
-    """
     fig = px.scatter(
         x=X[:, 0], y=X[:, 1],
         labels={"x": "y(t)", "y": f"y(t+{tau})"},
         title="2D Takens Embedding"
     )
-    size = 600
-    fig.update_layout(width=size, height=size)
+    fig.update_layout(width=600, height=600)
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
     return fig
 
 
 def plot_embedding_3d(X, time_axis):
-    """
-    Plot 3D Takens embedding: x=y(t), y=y(t+τ), z=time (s) for each point.
-    """
     fig = go.Figure(go.Scatter3d(
         x=X[:, 0],
         y=X[:, 1],
@@ -140,17 +114,10 @@ def main():
         if uploaded:
             audio_bytes = uploaded.read()
     else:
-        st.sidebar.info("Recording max 3 seconds")
-        # Record using audiorecorder component
-        audio = audiorecorder("Start recording", "Stop recording", pause_prompt="", show_visualizer=True, key="mic")
-        if audio and len(audio) > 0:
-            # audio is a pydub AudioSegment
-            # Limit to first 3 seconds
-            if audio.duration_seconds > 3:
-                audio = audio[:3000]
-            buf = io.BytesIO()
-            audio.export(buf, format="wav")
-            audio_bytes = buf.getvalue()
+        # Record using audiorecorder component without max time limit
+        audio = audiorecorder("Start recording", "Stop recording", key="mic")
+        if audio:
+            audio_bytes = audio
 
     if not audio_bytes:
         st.info("Please upload or record audio to proceed.")
