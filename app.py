@@ -93,7 +93,7 @@ def plot_embedding_2d(X, tau):
         labels={"x": "y(t)", "y": f"y(t+{tau})"},
         title="2D Takens Embedding"
     )
-    fig.update_layout(width=600, height=600)
+    fig.update_layout(width=800, height=500)
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
     return fig
 
@@ -107,7 +107,11 @@ def plot_embedding_3d(X, time_axis):
         y=X[:, 1],
         z=time_axis,
         mode="markers",
-        marker=dict(size=4, color=time_axis, colorscale="Viridis", colorbar=dict(title="Time (s)"))
+        marker=dict(size=4, color=time_axis, 
+                    colorscale="Viridis", 
+                    showscale=False,
+                    #colorbar=dict(title="Time (s)")
+                   )
     ))
     fig.update_layout(
         title="3D Takens Embedding (with Time)",
@@ -116,7 +120,7 @@ def plot_embedding_3d(X, time_axis):
             yaxis_title="y(t+τ)",
             zaxis_title="Time (s)"
         ),
-        width=600, height=600,
+        width=800, height=800,
         margin=dict(t=40, b=40)
     )
     return fig
