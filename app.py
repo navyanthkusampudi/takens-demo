@@ -1,7 +1,5 @@
 import io
 import numpy as np
-import sounddevice as sd
-import wavio
 import warnings
 from scipy.io.wavfile import WavFileWarning
 from scipy.io import wavfile
@@ -11,27 +9,13 @@ import plotly.express as px
 import plotly.graph_objs as go
 import streamlit as st
 
+# the recorder component
+from audiorecorder import audiorecorder
+
 # suppress non‑data chunk warnings from scipy wavfile
 warnings.filterwarnings("ignore", category=WavFileWarning)
 
 # ——————————————————————————————————————————————————————————————————————
-# Recording via sounddevice + wavio
-def record_python(duration=5, sr=44100):
-    """
-    Record `duration` seconds from the default microphone at sample rate `sr`.
-    Returns WAV‐encoded bytes (mono, 16‑bit).
-    """
-    st.info(f"Recording {duration:.1f}s at {sr} Hz…")
-    audio = sd.rec(int(duration * sr), samplerate=sr, channels=1, dtype="int16")
-    sd.wait()
-    buf = io.BytesIO()
-    # wavio expects shape (nsamples, nchannels)
-    wavio.write(buf, audio, sr, sampwidth=2)
-    st.success("Recording complete!")
-    return buf.getvalue()
-
-# ——————————————————————————————————————————————————————————————————————
-# Your existing processing functions
 def load_audio(audio_bytes):
     sr, data = wavfile.read(io.BytesIO(audio_bytes))
     y = data.mean(axis=1).astype(float) if data.ndim > 1 else data.astype(float)
@@ -114,7 +98,7 @@ def main():
     st.title("Interactive Takens’ Time‑Delay Embedding")
 
     st.sidebar.header("Audio Source")
-    source = st.sidebar.radio("Choose Source", ("Upload WAV", "Record (Python)"))
+    source = st.sidebar.radio("Choose Source", ("Upload WAV", "Record"))
 
     audio_bytes = None
     if source == "Upload WAV":
@@ -122,20 +106,18 @@ def main():
         if uploaded:
             audio_bytes = uploaded.read()
     else:
-        duration = st.sidebar.slider("Duration (s)", 1.0, 30.0, 5.0, step=1.0)
-        sr_rec = st.sidebar.selectbox("Record SR (Hz)", [8000, 16000, 44100, 48000], index=2)
-        if st.sidebar.button("Start Recording"):
-            audio_bytes = record_python(duration=duration, sr=sr_rec)
+        # the audiorecorder widget returns WAV bytes when recording stops
+        audio_bytes = audiorecorder("▶️ Record", "⏹️ Stop")
 
     if not audio_bytes:
         st.info("Please upload or record audio to proceed.")
         return
 
-    # play & process
+    # playback
     st.audio(audio_bytes, format="audio/wav")
     sr, y_full = load_audio(audio_bytes)
 
-    # window / embedding params
+    # window & embedding params
     duration_full = len(y_full) / sr
     default_end = min(duration_full, 1.0)
     st.sidebar.header("Select data window")
@@ -152,7 +134,7 @@ def main():
     # compute spectrogram
     f, t_spec, Sxx_db = compute_spectrogram(y_full, sr)
 
-    # render
+    # render plots
     st.pyplot(plot_full_timeseries(y_full, sr, t0, t1))
     st.pyplot(plot_full_spectrogram(f, t_spec, Sxx_db, t0, t1))
     st.plotly_chart(plot_window_scatter(y_win, sr), use_container_width=True)
