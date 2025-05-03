@@ -13,10 +13,31 @@ import plotly.express as px
 import plotly.graph_objs as go
 
 # Use streamlit-webrtc for in-browser audio capture
-from streamlit_webrtc import webrtc_streamer, WebRtcMode
+# remove WebRTC recording imports and functions
+import io
 
+import numpy as np
+import warnings
+from scipy.io.wavfile import WavFileWarning
+# suppress non-data chunk warnings from scipy wavfile
+warnings.filterwarnings("ignore", category=WavFileWarning)
+import streamlit as st
+from scipy.io import wavfile
+from scipy.signal import spectrogram as spgram
+import matplotlib.pyplot as plt
+import plotly.express as px
+import plotly.graph_objs as go
+
+# --- Audio Handling: only upload ---
 
 def load_audio(audio_bytes):
+    """
+    Read WAV from raw bytes and return sample rate and normalized mono signal.
+    """
+    sr, data = wavfile.read(io.BytesIO(audio_bytes))
+    y = data.mean(axis=1).astype(float) if data.ndim > 1 else data.astype(float)
+    y /= np.max(np.abs(y))
+    return sr, y(audio_bytes):
     """
     Read WAV from raw bytes and return sample rate and normalized mono signal.
     """
