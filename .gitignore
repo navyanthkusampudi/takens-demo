@@ -13,4 +13,4 @@ __pycache__/
 Thumbs.db
 
 # (Optionally) ignore large WAVs
-*.wav
+#*.wav

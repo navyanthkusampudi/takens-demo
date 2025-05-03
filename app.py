@@ -1,5 +1,4 @@
 import io
-
 import numpy as np
 import streamlit as st
 from scipy.io import wavfile
@@ -108,11 +107,9 @@ def plot_embedding_3d(X, time_axis):
         y=X[:, 1],
         z=time_axis,
         mode="markers",
-        marker=dict(size=4, color=time_axis, 
-                    colorscale="Viridis", 
-                    showscale=False,
-                    #colorbar=dict(title="Time (s)")
-                   )
+        marker=dict(size=4, color=time_axis,
+                    colorscale="Viridis",
+                    showscale=False)
     ))
     fig.update_layout(
         title="3D Takens Embedding (with Time)",
@@ -131,13 +128,17 @@ def main():
     st.set_page_config(page_title="Takens Embedding Demo", layout="wide")
     st.title("Interactive Takens’ Time-Delay Embedding")
 
-    # Upload and play audio
+    # --- file upload or default ---
     uploaded = st.file_uploader("Upload a WAV file (mono or stereo)", type=["wav"])
-    if not uploaded:
-        st.info("Please upload a WAV file to begin.")
-        return
+    if uploaded:
+        audio_bytes = uploaded.read()
+    else:
+        default_path = r".\sound_data\XC358435 - Cordillera Azul Antbird - Myrmoderus eowilsoni.wav"
+        st.warning(f"No file uploaded; using default audio:\n`{default_path}`")
+        with open(default_path, "rb") as f:
+            audio_bytes = f.read()
 
-    audio_bytes = uploaded.read()
+    # play & load
     st.audio(audio_bytes, format="audio/wav")
     sr, y_full = load_audio(audio_bytes)
 
@@ -174,10 +175,10 @@ def main():
     st.plotly_chart(plot_embedding_2d(X, tau), use_container_width=False)
     if show_3d:
         if m >= 3:
-            # Use time_win up to length of embedding
             st.plotly_chart(plot_embedding_3d(X, time_win[: len(X)]), use_container_width=False)
         else:
             st.warning("Need m ≥ 3 for 3D embedding.")
+
 
 if __name__ == "__main__":
     main()
