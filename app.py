@@ -1,31 +1,32 @@
 import io
+
 import numpy as np
-import warnings
-from scipy.io.wavfile import WavFileWarning
+import streamlit as st
 from scipy.io import wavfile
 from scipy.signal import spectrogram as spgram
 import matplotlib.pyplot as plt
 import plotly.express as px
 import plotly.graph_objs as go
-import streamlit as st
 
-# the recorder component
-from audiorecorder import audiorecorder
+# Use streamlit-webrtc for in-browser audio capture
+from streamlit_webrtc import webrtc_streamer, WebRtcMode
 
-# suppress non‑data chunk warnings from scipy wavfile
-warnings.filterwarnings("ignore", category=WavFileWarning)
 
-# ——————————————————————————————————————————————————————————————————————
 def load_audio(audio_bytes):
+    """
+    Read WAV from raw bytes and return sample rate and normalized mono signal.
+    """
     sr, data = wavfile.read(io.BytesIO(audio_bytes))
     y = data.mean(axis=1).astype(float) if data.ndim > 1 else data.astype(float)
     y /= np.max(np.abs(y))
     return sr, y
 
+
 def compute_spectrogram(y, sr, nperseg=1024, noverlap=512):
     f, t, Sxx = spgram(y, fs=sr, nperseg=nperseg, noverlap=noverlap)
     Sxx_db = 10 * np.log10(Sxx + 1e-10)
     return f, t, Sxx_db
+
 
 def compute_embedding(y, tau, m):
     N = len(y) - (m - 1) * tau
@@ -33,16 +34,19 @@ def compute_embedding(y, tau, m):
         return None
     return np.column_stack([y[i : i + N] for i in range(0, m * tau, tau)])
 
+
 def plot_full_timeseries(y, sr, t0, t1):
     time = np.arange(len(y)) / sr
     y_win = y[int(t0 * sr) : int(t1 * sr)]
     time_win = np.arange(int(t0 * sr), int(t1 * sr)) / sr
+
     fig, ax = plt.subplots(figsize=(8, 3))
     ax.plot(time, y, color="lightgray", linewidth=1)
     ax.plot(time_win, y_win, color="red", linewidth=1)
     ax.set(xlabel="Time (s)", ylabel="Amplitude",
            title="Full Time Series with Selected Window")
     return fig
+
 
 def plot_full_spectrogram(f, t, Sxx_db, t0, t1):
     fig, ax = plt.subplots(figsize=(8, 3))
@@ -51,6 +55,7 @@ def plot_full_spectrogram(f, t, Sxx_db, t0, t1):
     ax.set(xlabel="Time (s)", ylabel="Frequency (Hz)",
            title="Full Spectrogram with Selected Window")
     return fig
+
 
 def plot_window_scatter(y_win, sr):
     time_win = np.arange(len(y_win)) / sr
@@ -62,6 +67,7 @@ def plot_window_scatter(y_win, sr):
     fig.update_traces(marker=dict(size=4))
     return fig
 
+
 def plot_embedding_2d(X, tau):
     fig = px.scatter(
         x=X[:, 0], y=X[:, 1],
@@ -71,6 +77,7 @@ def plot_embedding_2d(X, tau):
     fig.update_layout(width=600, height=600)
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
     return fig
+
 
 def plot_embedding_3d(X, time_axis):
     fig = go.Figure(go.Scatter3d(
@@ -92,54 +99,80 @@ def plot_embedding_3d(X, time_axis):
     )
     return fig
 
-# ——————————————————————————————————————————————————————————————————————
+
+def record_audio():
+    """
+    Use WebRTC to capture audio from the mic and return WAV bytes when stopped.
+    """
+    ctx = webrtc_streamer(
+        key="mic",
+        mode=WebRtcMode.SENDONLY,
+        audio_receiver_size=256,
+        media_stream_constraints={"audio": True, "video": False},
+    )
+    if ctx.state.playing and ctx.audio_receiver:
+        frames = ctx.audio_receiver.get_frames()
+        if frames:
+            # Assume uniform sample rate
+            sr = frames[0].sample_rate
+            # Convert to mono numpy array
+            arr = np.concatenate([f.to_ndarray()[0] for f in frames])
+            buf = io.BytesIO()
+            wavfile.write(buf, sr, arr)
+            return buf.getvalue()
+    return None
+
+
 def main():
     st.set_page_config(page_title="Takens Embedding Demo", layout="wide")
-    st.title("Interactive Takens’ Time‑Delay Embedding")
+    st.title("Interactive Takens’ Time-Delay Embedding")
 
-    st.sidebar.header("Audio Source")
-    source = st.sidebar.radio("Choose Source", ("Upload WAV", "Record"))
+    # Audio source: upload or record
+    st.sidebar.header("Audio source")
+    source = st.sidebar.radio("Choose source", ("Upload WAV", "Record from mic"))
+    # Remind user to select microphone source when recording
+    if source == "Record from mic":
+        st.sidebar.warning("⚠️ **Remember to select your microphone as the audio input device!**")
 
     audio_bytes = None
     if source == "Upload WAV":
-        uploaded = st.sidebar.file_uploader("Upload a WAV file", type=["wav"])
+        uploaded = st.file_uploader("Upload a WAV file", type=["wav"])
         if uploaded:
             audio_bytes = uploaded.read()
     else:
-        # the audiorecorder widget returns WAV bytes when recording stops
-        audio_bytes = audiorecorder("▶️ Record", "⏹️ Stop")
+        audio_bytes = record_audio()
 
     if not audio_bytes:
         st.info("Please upload or record audio to proceed.")
         return
 
-    # playback
+    # Play audio
     st.audio(audio_bytes, format="audio/wav")
     sr, y_full = load_audio(audio_bytes)
 
-    # window & embedding params
-    duration_full = len(y_full) / sr
-    default_end = min(duration_full, 1.0)
+    # Sidebar: window & embedding params
+    duration = len(y_full) / sr
+    default_end = duration / 10
     st.sidebar.header("Select data window")
-    t0, t1 = st.sidebar.slider("Window (s)", 0.0, duration_full, (0.0, default_end), step=0.01)
+    t0, t1 = st.sidebar.slider("Window (s)", 0.0, duration, (0.0, default_end), step=0.01)
     i0, i1 = int(t0 * sr), int(t1 * sr)
     y_win = y_full[i0:i1]
     time_win = np.arange(i0, i1) / sr
 
     st.sidebar.header("Embedding parameters")
-    tau = st.sidebar.slider("Delay τ (samples)", 1, 100, 10, 1)
+    tau = st.sidebar.slider("Delay τ (samples)", 1, 50, 10, 1)
     m = st.sidebar.slider("Dimension m", 2, 20, 3, 1)
     show_3d = st.sidebar.checkbox("Show 3D embedding", False)
 
-    # compute spectrogram
+    # Compute spectrogram
     f, t_spec, Sxx_db = compute_spectrogram(y_full, sr)
 
-    # render plots
+    # Render plots
     st.pyplot(plot_full_timeseries(y_full, sr, t0, t1))
     st.pyplot(plot_full_spectrogram(f, t_spec, Sxx_db, t0, t1))
     st.plotly_chart(plot_window_scatter(y_win, sr), use_container_width=True)
 
-    # embedding
+    # Compute embedding
     X = compute_embedding(y_win, tau, m)
     if X is None:
         st.error(f"Segment too short for m={m}, τ={tau} (need > {(m-1)*tau} samples).")
