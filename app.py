@@ -28,7 +28,7 @@ st.sidebar.header("Select data window")
 t0, t1 = st.sidebar.slider(
     "Window (seconds)",
     min_value=0.0,
-    max_value=float(duration),
+    max_value=float(duration)/10.0,
     value=(0.0, float(duration)),
     step=0.01,
 )
