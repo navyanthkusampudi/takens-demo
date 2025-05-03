@@ -3,143 +3,187 @@ import io
 import numpy as np
 import streamlit as st
 from scipy.io import wavfile
-from scipy.signal import spectrogram
-import plotly.graph_objs as go
+from scipy.signal import spectrogram as spgram
+import matplotlib.pyplot as plt
 import plotly.express as px
+import plotly.graph_objs as go
 
-st.set_page_config(page_title="Takens Embedding Demo", layout="wide")
-st.title("Interactive Takens’ Time-Delay Embedding")
 
-# --- 1) Upload & read ---
-uploaded = st.file_uploader("Upload a WAV file (mono or stereo)", type=["wav"])
-if not uploaded:
-    st.info("Please upload a WAV file to begin.")
-    st.stop()
+def load_audio(uploaded_file):
+    """
+    Read WAV file from uploaded BytesIO and return sample rate and normalized mono signal.
+    """
+    sr, data = wavfile.read(io.BytesIO(uploaded_file.read()))
+    # Convert stereo to mono if needed
+    y = data.mean(axis=1).astype(float) if data.ndim > 1 else data.astype(float)
+    # Normalize amplitude
+    y /= np.max(np.abs(y))
+    return sr, y
 
-bytes_wav = io.BytesIO(uploaded.read())
-sr, data = wavfile.read(bytes_wav)
-# stereo → mono
-y_full = data.mean(axis=1).astype(float) if data.ndim > 1 else data.astype(float)
-y_full /= np.max(np.abs(y_full))
 
-# --- 2) Pre-compute spectrogram on the full signal ---
-f, t_spec, Sxx = spectrogram(y_full, fs=sr, nperseg=1024, noverlap=512)
-# power → decibels
-Sxx_db = 10 * np.log10(Sxx + 1e-10)
+def compute_spectrogram(y, sr, nperseg=1024, noverlap=512):
+    """
+    Compute spectrogram (in dB) of signal y.
+    Returns frequencies, times, and dB-scaled spectrogram.
+    """
+    f, t, Sxx = spgram(y, fs=sr, nperseg=nperseg, noverlap=noverlap)
+    Sxx_db = 10 * np.log10(Sxx + 1e-10)
+    return f, t, Sxx_db
 
-# --- 3) Sidebar: select a window in seconds ---
-duration = len(y_full) / sr
-st.sidebar.header("Select data window")
-t0, t1 = st.sidebar.slider(
-    "Window (sec)",
-    min_value=0.0,
-    max_value=float(duration),
-    value=(0.0, float(duration)),
-    step=0.01,
-)
-i0, i1 = int(t0 * sr), int(t1 * sr)
-y_win = y_full[i0:i1]
-actual_dur = (i1 - i0) / sr
-st.sidebar.write(f"Selected segment: {actual_dur:.2f} s")
 
-# --- 4) Sidebar: embedding parameters ---
-st.sidebar.header("Embedding parameters")
-τ = st.sidebar.slider("Delay τ (samples)", 1, 50, 10, 1)
-m = st.sidebar.slider("Dimension m", 2, 20, 3, 1)
-show_3d = st.sidebar.checkbox("Show 3D embedding", value=True)
+def compute_embedding(y, tau, m):
+    """
+    Build Takens time-delay embedding matrix of dimension m and delay tau.
+    Returns array of shape (N, m).
+    """
+    N = len(y) - (m - 1) * tau
+    if N <= 0:
+        return None
+    # Stack delayed vectors
+    return np.column_stack([y[i : i + N] for i in range(0, m * tau, tau)])
 
-# --- 5) Plot full time series + highlight window ---
-time_full = np.arange(len(y_full)) / sr
-fig_ts = go.Figure()
-fig_ts.add_trace(go.Scatter(
-    x=time_full, y=y_full,
-    mode="lines",
-    line=dict(color="lightgray"),
-    name="Full signal"
-))
-fig_ts.add_trace(go.Scatter(
-    x=time_full[i0:i1], y=y_full[i0:i1],
-    mode="lines",
-    line=dict(color="red"),
-    name="Selected window"
-))
-fig_ts.update_layout(
-    title="Full Time Series with Selected Window",
-    xaxis_title="Time (s)",
-    yaxis_title="Amplitude",
-    showlegend=False,
-    margin=dict(t=40, b=40)
-)
-st.plotly_chart(fig_ts, use_container_width=True)
 
-# --- 6) Plot full spectrogram + highlight window ---
-fig_spec = go.Figure()
-fig_spec.add_trace(go.Heatmap(
-    z=Sxx_db,
-    x=t_spec,
-    y=f,
-    colorscale=[[0, "white"], [1, "black"]],
-    showscale=False,
-    zsmooth="best"
-))
-# overlay rectangle
-fig_spec.update_layout(
-    title="Full Spectrogram with Selected Window",
-    xaxis_title="Time (s)",
-    yaxis_title="Frequency (Hz)",
-    shapes=[
-        dict(
-            type="rect",
-            x0=t0, x1=t1,
-            y0=0, y1=1,
-            xref="x", yref="paper",
-            fillcolor="red",
-            opacity=0.2,
-            layer="above",
-            line_width=0,
-        )
-    ],
-    margin=dict(t=40, b=40)
-)
-st.plotly_chart(fig_spec, use_container_width=True)
+def plot_full_timeseries(y, sr, t0, t1):
+    """
+    Plot full time series in gray with selected window overlayed in red.
+    """
+    time = np.arange(len(y)) / sr
+    y_win = y[int(t0 * sr) : int(t1 * sr)]
+    time_win = np.arange(int(t0 * sr), int(t1 * sr)) / sr
 
-# --- 7) Takens embedding on the windowed data ---
-N = len(y_win) - (m - 1) * τ
-if N <= 0:
-    st.error(
-        f"Segment too short for m={m}, τ={τ} "
-        f"(need > {(m-1)*τ} samples)."
+    fig, ax = plt.subplots(figsize=(8, 3))
+    ax.plot(time, y, color="lightgray", linewidth=1)
+    ax.plot(time_win, y_win, color="red", linewidth=1)
+    ax.set(xlabel="Time (s)", ylabel="Amplitude",
+           title="Full Time Series with Selected Window")
+    return fig
+
+
+def plot_full_spectrogram(f, t, Sxx_db, t0, t1):
+    """
+    Plot full spectrogram in gray-scale with a red transparent span for the selected window.
+    """
+    fig, ax = plt.subplots(figsize=(8, 3))
+    pcm = ax.pcolormesh(t, f, Sxx_db, cmap="gray", shading="gouraud")
+    ax.axvspan(t0, t1, color="red", alpha=0.3)
+    ax.set(xlabel="Time (s)", ylabel="Frequency (Hz)",
+           title="Full Spectrogram with Selected Window")
+    return fig
+
+
+def plot_window_scatter(y_win, sr):
+    """
+    Plot selected window as a Plotly scatter time series.
+    """
+    time_win = np.arange(len(y_win)) / sr
+    fig = px.scatter(
+        x=time_win, y=y_win,
+        labels={"x": "Time (s)", "y": "Amplitude"},
+        title="Selected Window Time Series"
     )
-    st.stop()
+    return fig
 
-# build embedding matrix
-X = np.column_stack([y_win[i : i + N] for i in range(0, m*τ, τ)])
 
-# 2D scatter
-fig2d = px.scatter(
-    x=X[:, 0],
-    y=X[:, 1],
-    labels={"x": "y(t)", "y": f"y(t+{τ})"},
-    title="2D Takens Embedding"
-)
-st.plotly_chart(fig2d, use_container_width=True)
+def plot_embedding_2d(X, tau):
+    """
+    Plot 2D Takens embedding as a 600x600 square with equal scales.
+    """
+    fig = px.scatter(
+        x=X[:, 0], y=X[:, 1],
+        labels={"x": "y(t)", "y": f"y(t+{tau})"},
+        title="2D Takens Embedding"
+    )
+    fig.update_layout(width=600, height=600)
+    fig.update_yaxes(scaleanchor="x", scaleratio=1)
+    return fig
 
-# optional 3D
-if show_3d:
-    if m >= 3:
-        trace3d = go.Scatter3d(
-            x=X[:, 0], y=X[:, 1], z=X[:, 2],
-            mode="markers", marker=dict(size=3, color="blue")
+
+def plot_embedding_3d(X, tau):
+    """
+    Plot 3D Takens embedding with first three coordinates.
+    """
+    fig = go.Figure(go.Scatter3d(
+        x=X[:, 0], y=X[:, 1], z=X[:, 2],
+        mode="markers", marker=dict(size=3, color="blue")
+    ))
+    fig.update_layout(
+        title="3D Takens Embedding",
+        scene=dict(
+            xaxis_title="y(t)",
+            yaxis_title=f"y(t+{tau})",
+            zaxis_title=f"y(t+{2*tau})"
+        ),
+        width=600, height=600,
+        margin=dict(t=40, b=40)
+    )
+    return fig
+
+
+def main():
+    # Streamlit page setup
+    st.set_page_config(page_title="Takens Embedding Demo", layout="wide")
+    st.title("Interactive Takens’ Time-Delay Embedding")
+
+    # Upload
+    uploaded = st.file_uploader("Upload a WAV file (mono or stereo)", type=["wav"])
+    if not uploaded:
+        st.info("Please upload a WAV file to begin.")
+        return
+
+    # Load data
+    sr, y_full = load_audio(uploaded)
+
+    # Sidebar: window selection
+    duration = len(y_full) / sr
+    st.sidebar.header("Select data window")
+    default_end = duration / 10
+    t0, t1 = st.sidebar.slider(
+        "Window (s)", 0.0, float(duration), (0.0, float(default_end)), step=0.01
+    )
+    i0, i1 = int(t0 * sr), int(t1 * sr)
+    y_win = y_full[i0:i1]
+
+    # Sidebar: embedding parameters
+    st.sidebar.header("Embedding parameters")
+    tau = st.sidebar.slider("Delay τ (samples)", 1, 50, 10, 1)
+    m = st.sidebar.slider("Dimension m", 2, 20, 3, 1)
+    show_3d = st.sidebar.checkbox("Show 3D embedding", False)
+
+    # Compute spectrogram once
+    f, t_spec, Sxx_db = compute_spectrogram(y_full, sr)
+
+    # Plot full time series
+    fig_ts = plot_full_timeseries(y_full, sr, t0, t1)
+    st.pyplot(fig_ts)
+
+    # Plot full spectrogram
+    fig_sp = plot_full_spectrogram(f, t_spec, Sxx_db, t0, t1)
+    st.pyplot(fig_sp)
+
+    # Plot selected window scatter
+    fig_win = plot_window_scatter(y_win, sr)
+    st.plotly_chart(fig_win, use_container_width=True)
+
+    # Takens embedding
+    X = compute_embedding(y_win, tau, m)
+    if X is None:
+        st.error(
+            f"Segment too short for m={m}, τ={tau} (need > {(m-1)*tau} samples)."
         )
-        layout3d = dict(
-            scene=dict(
-                xaxis_title="y(t)",
-                yaxis_title=f"y(t+{τ})",
-                zaxis_title=f"y(t+{2*τ})",
-            ),
-            title="3D Takens Embedding",
-            margin=dict(t=40, b=40)
-        )
-        st.plotly_chart({"data":[trace3d], "layout":layout3d}, use_container_width=True)
-    else:
-        st.warning("Need m ≥ 3 to show the 3D plot.")
+        return
+
+    # 2D embedding
+    fig2d = plot_embedding_2d(X, tau)
+    st.plotly_chart(fig2d, use_container_width=False)
+
+    # 3D embedding
+    if show_3d:
+        if m >= 3:
+            fig3d = plot_embedding_3d(X, tau)
+            st.plotly_chart(fig3d, use_container_width=False)
+        else:
+            st.warning("Need m ≥ 3 for 3D embedding.")
+
+
+if __name__ == "__main__":
+    main()
