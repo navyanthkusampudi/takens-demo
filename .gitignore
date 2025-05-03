@@ -1,0 +1,16 @@
+# Virtual environments
+.venv/
+
+# Streamlit cache
+.streamlit/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# (Optionally) ignore large WAVs
+*.wav
