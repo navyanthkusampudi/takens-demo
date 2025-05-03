@@ -1,4 +1,6 @@
 import io
+from pathlib import Path
+
 import numpy as np
 import streamlit as st
 from scipy.io import wavfile
@@ -133,10 +135,14 @@ def main():
     if uploaded:
         audio_bytes = uploaded.read()
     else:
-        default_path = r".\sound_data\XC358435 - Cordillera Azul Antbird - Myrmoderus eowilsoni.wav"
+        # build path relative to this script
+        DATA_DIR = Path(__file__).parent / "sound_data"
+        default_path = DATA_DIR / "XC358435 - Cordillera Azul Antbird - Myrmoderus eowilsoni.wav"
+        if not default_path.exists():
+            st.error(f"Default audio not found at:\n{default_path}")
+            return
         st.warning(f"No file uploaded; using default audio:\n`{default_path}`")
-        with open(default_path, "rb") as f:
-            audio_bytes = f.read()
+        audio_bytes = default_path.read_bytes()
 
     # play & load
     st.audio(audio_bytes, format="audio/wav")
