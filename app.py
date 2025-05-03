@@ -72,7 +72,7 @@ def plot_full_spectrogram(f, t, Sxx_db, t0, t1):
 
 def plot_window_scatter(y_win, sr):
     """
-    Plot selected window as a Plotly scatter time series.
+    Plot selected window as a Plotly scatter time series with marker size 4.
     """
     time_win = np.arange(len(y_win)) / sr
     fig = px.scatter(
@@ -80,6 +80,7 @@ def plot_window_scatter(y_win, sr):
         labels={"x": "Time (s)", "y": "Amplitude"},
         title="Selected Window Time Series"
     )
+    fig.update_traces(marker=dict(size=4))
     return fig
 
 
@@ -97,20 +98,23 @@ def plot_embedding_2d(X, tau):
     return fig
 
 
-def plot_embedding_3d(X, tau):
+def plot_embedding_3d(X, time_axis):
     """
-    Plot 3D Takens embedding with first three coordinates.
+    Plot 3D Takens embedding: x=y(t), y=y(t+τ), z=time (s) for each point.
     """
     fig = go.Figure(go.Scatter3d(
-        x=X[:, 0], y=X[:, 1], z=X[:, 2],
-        mode="markers", marker=dict(size=3, color="blue")
+        x=X[:, 0],
+        y=X[:, 1],
+        z=time_axis,
+        mode="markers",
+        marker=dict(size=4, color=time_axis, colorscale="Viridis", colorbar=dict(title="Time (s)"))
     ))
     fig.update_layout(
-        title="3D Takens Embedding",
+        title="3D Takens Embedding (with Time)",
         scene=dict(
             xaxis_title="y(t)",
-            yaxis_title=f"y(t+{tau})",
-            zaxis_title=f"y(t+{2*tau})"
+            yaxis_title="y(t+τ)",
+            zaxis_title="Time (s)"
         ),
         width=600, height=600,
         margin=dict(t=40, b=40)
@@ -141,6 +145,7 @@ def main():
     )
     i0, i1 = int(t0 * sr), int(t1 * sr)
     y_win = y_full[i0:i1]
+    time_win = np.arange(i0, i1) / sr
 
     st.sidebar.header("Embedding parameters")
     tau = st.sidebar.slider("Delay τ (samples)", 1, 50, 10, 1)
@@ -160,10 +165,12 @@ def main():
     if X is None:
         st.error(f"Segment too short for m={m}, τ={tau} (need > {(m-1)*tau} samples).")
         return
+
     st.plotly_chart(plot_embedding_2d(X, tau), use_container_width=False)
     if show_3d:
         if m >= 3:
-            st.plotly_chart(plot_embedding_3d(X, tau), use_container_width=False)
+            # Use time_win up to length of embedding
+            st.plotly_chart(plot_embedding_3d(X, time_win[: len(X)]), use_container_width=False)
         else:
             st.warning("Need m ≥ 3 for 3D embedding.")
 
