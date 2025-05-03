@@ -3,6 +3,6 @@ numpy
 scipy
 plotly
 matplotlib
-streamlit-webrtc
+streamlit-audiorecorder
 
 
