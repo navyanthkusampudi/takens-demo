@@ -128,10 +128,13 @@ def main():
                 **Key features:**
                 - Displays waveform and spectrogram of the full signal.
                 - Lets you zoom into a time window for focused analysis.
-                - Computes and visualizes 2D and 3D embeddings of the signal using chosen **delay (τ)** and **embedding dimension (m)**.
-                - Helps reveal the **attractor structure** that captures the dynamics of the audio source.
+                - Computes and visualizes 2D and 3D embeddings using a chosen **delay (τ)** and **embedding dimension (m)**.
+                - Helps reveal the **attractor structure** that captures the temporal dynamics of the signal.
 
-                This is a hands-on tool for studying chaotic behavior and phase space reconstruction in real-world audio data.
+                By default, the app loads a sample recording of the **Cordillera Azul Antbird** (*Myrmoderus eowilsoni*)  
+                from [Xeno-Canto](https://www.xeno-canto.org/358435) if no file is uploaded.
+
+                🔗 View the full source code on [GitHub](https://github.com/navyanthkusampudi/takens-demo.git)
                 """)
 
     # allow both wav and mp3
